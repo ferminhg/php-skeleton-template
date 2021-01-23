@@ -1,0 +1,102 @@
+imports:
+  - { resource: ../../../../src/Backoffice/Shared/Infrastructure/Symfony/DependencyInjection/backoffice_services.yaml }
+  - { resource: ../../../../src/Mooc/Shared/Infrastructure/Symfony/DependencyInjection/mooc_services.yaml }
+
+services:
+  _defaults:
+    autoconfigure: true
+    autowire: true
+
+  # Configure
+  _instanceof:
+    Devaway\Shared\Domain\Bus\Event\DomainEventSubscriber:
+      tags: ['devaway.domain_event_subscriber']
+
+    Devaway\Shared\Domain\Bus\Command\CommandHandler:
+      tags: ['devaway.command_handler']
+
+    Devaway\Shared\Domain\Bus\Query\QueryHandler:
+      tags: ['devaway.query_handler']
+
+  Devaway\Apps\Backoffice\Frontend\Controller\:
+    resource: '../src/Controller'
+    tags: ['controller.service_arguments']
+
+
+  # Wire
+  Devaway\Shared\:
+    resource: '../../../../src/Shared'
+
+  Devaway\Backoffice\:
+    resource: '../../../../src/Backoffice'
+
+  Devaway\Mooc\:
+    resource: '../../../../src/Mooc'
+
+  # -- TAGGING --
+  Devaway\Shared\Infrastructure\Bus\Event\InMemory\InMemorySymfonyEventBus:
+    arguments: [!tagged devaway.domain_event_subscriber]
+    lazy: true
+
+  Devaway\Shared\Infrastructure\Bus\Event\DomainEventMapping:
+    arguments: [!tagged devaway.domain_event_subscriber]
+
+  Devaway\Shared\Infrastructure\Bus\Event\DomainEventSubscriberLocator:
+    arguments: [!tagged devaway.domain_event_subscriber]
+
+  Devaway\Shared\Infrastructure\Doctrine\DatabaseConnections:
+    arguments: [!tagged devaway.database_connection]
+
+  Devaway\Shared\Infrastructure\Symfony\ApiExceptionListener:
+    tags:
+      - { name: kernel.event_listener, event: kernel.exception, method: onException }
+
+  Devaway\Shared\Infrastructure\Symfony\AddJsonBodyToRequestListener:
+    tags:
+      - { name: kernel.event_listener, event: kernel.request, method: onKernelRequest }
+
+
+  # -- APP DEFINITIONS --
+  # Command/Query Handlers
+  Devaway\Shared\Infrastructure\Bus\Command\InMemorySymfonyCommandBus:
+    arguments: [!tagged devaway.command_handler]
+
+  Devaway\Shared\Infrastructure\Bus\Query\InMemorySymfonyQueryBus:
+    arguments: [!tagged devaway.query_handler]
+
+  # RabbitMQ
+  Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqConnection:
+    arguments:
+      - host: '%env(RABBITMQ_HOST)%'
+        port: '%env(RABBITMQ_PORT)%'
+        vhost: '%env(RABBITMQ_MOOC_VHOST)%'
+        login: '%env(RABBITMQ_LOGIN)%'
+        password: '%env(RABBITMQ_PASSWORD)%'
+        read_timeout: 2
+        write_timeout: 2
+        connect_timeout: 5
+
+  Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqEventBus:
+    arguments: ['@Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqConnection', '%env(RABBITMQ_EXCHANGE)%']
+
+  Devaway\Shared\Infrastructure\Elasticsearch\ElasticsearchClient:
+    factory: '@Devaway\Shared\Infrastructure\Elasticsearch\ElasticsearchClientFactory'
+    arguments:
+      - '%env(BACKOFFICE_ELASTICSEARCH_HOST)%'
+      - '%env(BACKOFFICE_ELASTICSEARCH_INDEX_PREFIX)%'
+      - '%kernel.project_dir%/../../../etc/databases/backoffice'
+      - '%env(APP_ENV)%'
+    public: true
+
+  Devaway\Shared\Infrastructure\Bus\Event\WithMonitoring\WithPrometheusMonitoringEventBus:
+    arguments: ['@Devaway\Shared\Infrastructure\Monitoring\PrometheusMonitor', 'backoffice_frontend', '@Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqEventBus']
+
+  # -- IMPLEMENTATIONS SELECTOR --
+  Devaway\Shared\Domain\Bus\Event\EventBus: '@Devaway\Shared\Infrastructure\Bus\Event\WithMonitoring\WithPrometheusMonitoringEventBus'
+  Devaway\Backoffice\Courses\Domain\BackofficeCourseRepository: '@Devaway\Backoffice\Courses\Infrastructure\Persistence\ElasticsearchBackofficeCourseRepository'
+
+twig:
+  default_path: '%kernel.project_dir%/templates'
+  strict_variables: true
+  globals:
+    flash: '@Devaway\Shared\Infrastructure\Symfony\FlashSession'

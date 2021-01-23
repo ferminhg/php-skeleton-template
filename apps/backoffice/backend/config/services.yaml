@@ -1,0 +1,99 @@
+imports:
+  - { resource: ../../../../src/Backoffice/Shared/Infrastructure/Symfony/DependencyInjection/backoffice_services.yaml }
+
+services:
+  _defaults:
+    autoconfigure: true
+    autowire: true
+
+  # Configure
+  _instanceof:
+    Devaway\Shared\Domain\Bus\Event\DomainEventSubscriber:
+      tags: ['codely.domain_event_subscriber']
+
+    Devaway\Shared\Domain\Bus\Command\CommandHandler:
+      tags: ['codely.command_handler']
+
+    Devaway\Shared\Domain\Bus\Query\QueryHandler:
+      tags: ['codely.query_handler']
+
+  Devaway\Apps\Backoffice\Backend\Controller\:
+    resource: '../src/Controller'
+    tags: ['controller.service_arguments']
+
+
+  # Wire
+  Devaway\Shared\:
+    resource: '../../../../src/Shared'
+
+  Devaway\Backoffice\:
+    resource: '../../../../src/Backoffice'
+
+  # -- TAGGING --
+  Devaway\Shared\Infrastructure\Bus\Event\InMemory\InMemorySymfonyEventBus:
+    arguments: [!tagged codely.domain_event_subscriber]
+    lazy: true
+
+  Devaway\Shared\Infrastructure\Bus\Event\DomainEventMapping:
+    arguments: [!tagged codely.domain_event_subscriber]
+
+  Devaway\Shared\Infrastructure\Bus\Event\DomainEventSubscriberLocator:
+    arguments: [!tagged codely.domain_event_subscriber]
+
+  Devaway\Shared\Infrastructure\Doctrine\DatabaseConnections:
+    arguments: [!tagged codely.database_connection]
+
+  Devaway\Shared\Infrastructure\Symfony\AddJsonBodyToRequestListener:
+    tags:
+      - { name: kernel.event_listener, event: kernel.request, method: onKernelRequest }
+
+  Devaway\Shared\Infrastructure\Symfony\ApiExceptionListener:
+    tags:
+      - { name: kernel.event_listener, event: kernel.exception, method: onException }
+
+  Devaway\Shared\Infrastructure\Symfony\BasicHttpAuthMiddleware:
+    tags:
+      - { name: kernel.event_listener, event: kernel.request, method: onKernelRequest }
+
+
+  # -- APP DEFINITIONS --
+  # Command/Query Handlers
+  Devaway\Shared\Infrastructure\Bus\Command\InMemorySymfonyCommandBus:
+    arguments: [!tagged codely.command_handler]
+
+  Devaway\Shared\Infrastructure\Bus\Query\InMemorySymfonyQueryBus:
+    arguments: [!tagged codely.query_handler]
+
+  # RabbitMQ
+  Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqConnection:
+    arguments:
+      - host: '%env(RABBITMQ_HOST)%'
+        port: '%env(RABBITMQ_PORT)%'
+        vhost: '%env(RABBITMQ_MOOC_VHOST)%'
+        login: '%env(RABBITMQ_LOGIN)%'
+        password: '%env(RABBITMQ_PASSWORD)%'
+        read_timeout: 2
+        write_timeout: 2
+        connect_timeout: 5
+
+  Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqEventBus:
+    arguments: ['@Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqConnection', '%env(RABBITMQ_EXCHANGE)%']
+
+  Devaway\Shared\Infrastructure\Elasticsearch\ElasticsearchClient:
+    factory: '@Devaway\Shared\Infrastructure\Elasticsearch\ElasticsearchClientFactory'
+    arguments:
+      - '%env(BACKOFFICE_ELASTICSEARCH_HOST)%'
+      - '%env(BACKOFFICE_ELASTICSEARCH_INDEX_PREFIX)%'
+      - '%kernel.project_dir%/../../../etc/databases/backoffice'
+      - '%env(APP_ENV)%'
+    public: true
+
+  Devaway\Shared\Infrastructure\Bus\Event\WithMonitoring\WithPrometheusMonitoringEventBus:
+    arguments: ['@Devaway\Shared\Infrastructure\Monitoring\PrometheusMonitor', 'backoffice_backend', '@Devaway\Shared\Infrastructure\Bus\Event\RabbitMq\RabbitMqEventBus']
+
+  # -- IMPLEMENTATIONS SELECTOR --
+  Devaway\Shared\Domain\RandomNumberGenerator: '@Devaway\Shared\Infrastructure\ApiRandomNumberGenerator'
+
+  # -- IMPLEMENTATIONS SELECTOR --
+  Devaway\Shared\Domain\Bus\Event\EventBus: '@Devaway\Shared\Infrastructure\Bus\Event\WithMonitoring\WithPrometheusMonitoringEventBus'
+  Devaway\Backoffice\Courses\Domain\BackofficeCourseRepository: '@Devaway\Backoffice\Courses\Infrastructure\Persistence\ElasticsearchBackofficeCourseRepository'

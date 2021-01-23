@@ -1,0 +1,4 @@
+metrics_get:
+  path: /metrics
+  controller: Devaway\Apps\Backoffice\Backend\Controller\Metrics\MetricsController
+  methods:  [GET]

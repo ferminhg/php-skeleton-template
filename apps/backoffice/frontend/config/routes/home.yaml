@@ -1,0 +1,4 @@
+home_get:
+  path: /
+  controller: Devaway\Apps\Backoffice\Frontend\Controller\Home\HomeGetWebController
+  methods:  [GET]

@@ -1,0 +1,13 @@
+framework:
+  test: true
+
+services:
+  _defaults:
+    autoconfigure: true
+    autowire: true
+
+  Devaway\Tests\:
+    resource: '../../../../tests'
+
+  # -- IMPLEMENTATIONS SELECTOR --
+  Devaway\Shared\Domain\Bus\Event\EventBus: '@Devaway\Shared\Infrastructure\Bus\Event\InMemory\InMemorySymfonyEventBus'
